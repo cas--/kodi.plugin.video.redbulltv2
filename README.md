@@ -40,7 +40,7 @@ To run the unit tets (which includes integration tests that will connect to the 
 ```
 
 ## Pylint
-To run pylint to check code style, navigate to the repoisotory root and run the following:
+To run pylint to check code style, navigate to the repository root and run the following:
 	
 ```Shell
 find plugin.video.redbulltv2 -iname "*.py" | xargs pylint --output-format=colorized --disable=line-too-long,wrong-import-position

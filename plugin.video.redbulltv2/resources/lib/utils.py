@@ -1,4 +1,4 @@
-import re, urllib, urllib2
+import re, urllib, urllib2, json, pprint
 import xml.etree.ElementTree as ET
 
 def strip_url(url):
@@ -15,3 +15,15 @@ def get_xml(url):
         raise IOError(*err.reason)
     else:
         return ET.parse(response)
+
+def get_json(url, token=None):
+    try:
+        request = urllib2.Request(url)
+        if token:
+            request.add_header("Authorization", token)
+        response = urllib2.urlopen(request)
+    except urllib2.URLError as err:
+        raise IOError(*err.reason)
+    else:
+        # pprint.pprint(response.read())
+        return json.loads(response.read())
