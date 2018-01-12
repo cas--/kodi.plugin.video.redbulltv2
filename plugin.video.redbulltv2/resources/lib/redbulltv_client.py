@@ -1,10 +1,5 @@
-# from enum import Enum
-import re, urllib2, pprint
-import utils
-
-class ElementType: #(Enum):
-    collection = 1
-    product = 2
+import re, urllib2, os
+import resources.lib.utils as utils
 
 class RedbullTVClient(object):
     REDBULL_STREAMS = "https://dms.redbull.tv/v3/"
@@ -16,6 +11,7 @@ class RedbullTVClient(object):
         {"title": "Calendar", "url": REDBULL_API + "products/calendar", "is_content":False},
         {"title": "Search", "url": REDBULL_API + "search?q=", "is_content":False},
     ]
+    ELEMENT_TYPE = {"collection": 1, "product": 2}
 
     token = None
 
@@ -34,8 +30,16 @@ class RedbullTVClient(object):
 
     def get_stream_url(self, streams_url):
         url = streams_url
+        base_url = ''
+
+        # Try find stream for specific resolution stream, if that failed will use the
+        # playlist url passed in and kodi will choose a stream
         try:
-            playlists = urllib2.urlopen(url).read()
+            response = urllib2.urlopen(url)
+            # Required to get base url in case of a redirect, to use for relative paths
+            base_url = response.geturl()
+            playlists = response.read()
+
             resolution = self.get_resolution_code(self.resolution)
             media_url = re.search(
                 "RESOLUTION=" + resolution + ".*\n(.*)",
@@ -45,12 +49,15 @@ class RedbullTVClient(object):
         else:
             url = media_url
 
-        # Should use specific resolution stream, if that failed will use the 
-        # playlist url passed in and kodi will choose a stream
+        # if url is relative, add the base path
+        if base_url != '' and not url.startswith('http'):
+            url = os.path.dirname(base_url) + '/' + url
+
         return url
 
-    def get_image_url(self, id, resources, width=500, quality=70):
-        url = "https://resources.redbull.tv/" + id + "/"
+    @staticmethod
+    def get_image_url(image_id, resources, width=500, quality=70):
+        url = "https://resources.redbull.tv/" + image_id + "/"
 
         if "rbtv_cover_art_landscape" in resources:
             url += "rbtv_cover_art_landscape/im"
@@ -64,22 +71,22 @@ class RedbullTVClient(object):
 
         if quality:
             url += ",q_70"
-        
+
         return url
 
-    def get_element_details(self, element, element_type, parent_image_url = None):
+    def get_element_details(self, element, element_type, parent_image_url=None):
         details = {"is_content":False, "image": parent_image_url}
-        # details["is_content"] = element.get("playable")# == "video"
         if element.get("playable") or element.get("action") == "play":
             details["is_content"] = True
             details["url"] = self.REDBULL_STREAMS + element["id"] + "/" + self.token + "/playlist.m3u8"
             if element.get("duration"):
                 details["duration"] = element.get("duration") / 1000
-        elif element.get("start_time") and element.get("label") == "Upcoming": # and element.get("status").get("start_time"):
-            details["event_date"] = element["start_time"]
-        elif element_type == ElementType.collection:
+        # Handle video types that are actually upcoming events
+        elif 'type' in element and element.get('type') == "video" and 'status' in element and element.get("status").get("label") == "Upcoming":
+            details["event_date"] = element.get("status").get("start_time")
+        elif element_type == self.ELEMENT_TYPE["collection"]:
             details["url"] = self.REDBULL_API + "collections/" + element["id"] # + "?limit=20"
-        elif element_type == ElementType.product:
+        elif element_type == self.ELEMENT_TYPE["product"]:
             details["url"] = self.REDBULL_API + "products/" + element["id"] #+"?limit=20"
         subtitle = element.get("subheading")
 
@@ -87,41 +94,29 @@ class RedbullTVClient(object):
         details["summary"] = element.get("long_description")
         if element.get("resources"):
             # Check for resource, possibly have a look for resources based on preferences. Handle res accordingly
-            details["image"] =  self.get_image_url(element.get("id"), element.get("resources"))
-        # details["event_date"] = element.findtext('.//rightLabel')
+            details["image"] = self.get_image_url(element.get("id"), element.get("resources"))
 
         # Strip out any keys with empty values
         return {k:v for k, v in details.iteritems() if v is not None}
 
-    def get_items(self, url=None, page=1, limit=20):       
+    def get_items(self, url=None, page=1, limit=20):
         # If no url is specified, return the root menu
         if url is None:
             return self.ROOT_MENU
 
-        pprint.pprint("pprint: in get_items: "+ url)
-        # print("print: in get_items")
-
-        # pprint.pprint(session_response)
         if self.token is None:
-            pprint.pprint('Setting token');
             session_response = utils.get_json("https://api.redbull.tv/v3/session?category=smart_tv&os_family=android")
             self.token = session_response["token"]
 
-        # pprint.pprint(self.NEW_ROOT_MENU[0]["url"])
-        # result = utils.get_json(self.NEW_ROOT_MENU[0]["url"]+"", token)
-        # pprint.pprint(url+"?limit="+str(limit)+"&offset="+str((page-1)*limit),)
         result = utils.get_json(url+"?limit="+str(limit)+"&offset="+str((page-1)*limit), self.token)
-        # pprint.pprint(result)
 
         image_url = self.get_image_url(result.get("id"), result.get("resources")) if result.get("resources") else None
 
         items = []
-        if 'status' in result:
-            items.append(self.get_element_details(result["status"], ElementType.product, image_url))
         if 'links' in result:
             links = result["links"]
             for link in links:
-                items.append(self.get_element_details(link, ElementType.product, image_url))
+                items.append(self.get_element_details(link, self.ELEMENT_TYPE["product"], image_url))
 
         if 'collections' in result:
             collections = result["collections"]
@@ -129,19 +124,16 @@ class RedbullTVClient(object):
             # Handle Search results
             if collections[0].get("collection_type") == "top_results":
                 result["items"] = collections[0]["items"]
-            else:            
+            else:
                 for collection in collections:
-                    items.append(self.get_element_details(collection, ElementType.collection))
-        
+                    items.append(self.get_element_details(collection, self.ELEMENT_TYPE["collection"]))
+
         if 'items' in result:
             result_items = result["items"]
             for result_item in result_items:
-                items.append(self.get_element_details(result_item, ElementType.product, image_url))
+                items.append(self.get_element_details(result_item, self.ELEMENT_TYPE["product"], image_url))
 
         # Add next item if meta.total > meta.offset + meta.limit
-
-        # pprint.pprint(items)
-        # print(items)
         # print("client result count: "+str(len(items)))
 
         return items

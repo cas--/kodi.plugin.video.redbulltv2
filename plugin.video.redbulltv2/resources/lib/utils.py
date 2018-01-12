@@ -1,4 +1,4 @@
-import re, urllib, urllib2, json, pprint
+import re, urllib, urllib2, json
 import xml.etree.ElementTree as ET
 
 def strip_url(url):
@@ -25,5 +25,4 @@ def get_json(url, token=None):
     except urllib2.URLError as err:
         raise IOError(*err.reason)
     else:
-        # pprint.pprint(response.read())
         return json.loads(response.read())

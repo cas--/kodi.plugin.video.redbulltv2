@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, os, pprint, json, time
+import sys, os, time
 import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import lib.redbulltv_client as redbulltv
@@ -34,7 +34,7 @@ class ITTestRedbulltvClient(unittest.TestCase):
 
         self.assertGreater(len(result), 5)
         self.assertEqual(result[0].get("title"), "Featured")
-                
+
         # # TODO Order changed, Rather loop through an make sure Featured & Daily Highlights are in the list
         # self.assertEqual(result[1].get("category"), "Daily Highlights")
 
@@ -50,7 +50,6 @@ class ITTestRedbulltvClient(unittest.TestCase):
 
         for inp in test_data:
             result = self.redbulltv_client.get_items(inp)
-            # pprint.pprint(json.dumps(result))
             self.assertGreater(len(result), 5)
 
     def test_watch_now_stream(self):
@@ -65,7 +64,6 @@ class ITTestRedbulltvClient(unittest.TestCase):
         )
         inp, expected = test_data
         result = self.redbulltv_client.get_stream_url(inp)
-        pprint.pprint(result)
         self.assertNotEqual(result, expected[0])
 
     def test_search(self):
@@ -74,29 +72,25 @@ class ITTestRedbulltvClient(unittest.TestCase):
         """
         test_data = ('https://api.redbull.tv/v3/search?q=drop')
         result = self.redbulltv_client.get_items(test_data)
-        # pprint.pprint(json.dumps(result))
         self.assertGreater(len(result), 0)
-    
+
     def test_upcoming_live_event(self):
         """
         Test upcoming live events
         """
-        # test_data = ('https://appletv.redbull.tv/products/AP-1RCTZ2TMD2111?show_schedule=true%27);%22%20onPlay=%22loadPage(%27https://appletv.redbull.tv/products/AP-1RCTZ2TMD2111?show_schedule=true', None)
         result = self.redbulltv_client.get_items("https://api.redbull.tv/v3/products/calendar")
-        pprint.pprint(result)
-        # pprint.pprint(result[1]["url"]);
-        # TODO: Don't rely on order
-        result = self.redbulltv_client.get_items(result[1]["url"]) # Get Upcoming Live Events
-        pprint.pprint(result)
-        # result = self.redbulltv_client.get_items((item for item in result if item["title"] == "Schedule").next()["url"])
-        # result = self.redbulltv_client.get_items([item for item in result if item["title"] == "Schedule"][0]["url"])
-        result = self.redbulltv_client.get_items(result[1]["url"])
-        # result = self.redbulltv_client.get_items(filter(lambda item: item['title'] == 'Schedule', result)[0]["url"])
-        pprint.pprint(result)
-        # result = self.redbulltv_client.get_items([item for item in result if item["title"] == "Upcoming"][0]["url"])
-        # pprint.pprint(result)
-        self.assertIn('event_date', result[0])
-        self.assertGreater(result[0]["event_date"], time.time())
+
+        # Choose 'Upcoming Live Events' and pick the first from the list
+        result = self.redbulltv_client.get_items([item for item in result if item["title"] == "Upcoming Live Events"][0]["url"])
+        result = self.redbulltv_client.get_items(result[0]["url"])
+
+        # Choose Schedule
+        result = self.redbulltv_client.get_items([item for item in result if item["title"] == "Schedule"][0]["url"])
+
+        # Find the first entry with an Upcoming Date
+        result = [item for item in result if 'event_date' in item][0]
+        self.assertIn('event_date', result)
+        self.assertGreater(result["event_date"], time.time())
 
 if __name__ == '__main__':
     unittest.main()
