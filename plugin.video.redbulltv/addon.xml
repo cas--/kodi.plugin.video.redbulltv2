@@ -2,7 +2,7 @@
 <addon
   id="plugin.video.redbull.tv"
   name="Red Bull TV"
-  version="2.0.2"
+  version="2.0.3~alpha0"
   provider-name="andy-g"
 >
   <requires>
